@@ -1,0 +1,60 @@
+name: 'movie_ratings_analytics'
+version: '1.0.0'
+profile: 'movie_ratings_analytics'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ---------------------------------------------------------------------------
+# Materialisation policy
+#
+# Set here rather than per-model so that each layer's default is a stated policy
+# rather than an accident. Individual models override it only where there is a
+# reason, and that reason is recorded in the model file and in the README.
+#
+#   staging      view       Rename-and-cast only. Nothing worth storing, and no
+#                           query reads staging directly.
+#   intermediate ephemeral  Inlined into its single consumer. Nothing queries it
+#                           on its own, so persisting it would buy nothing.
+#   dim / fct    table      Joined constantly by marts and by ad-hoc queries.
+#   marts        table      Expensive to compute, small output, read repeatedly.
+#
+# Layer-level custom schemas are deliberately NOT used. Environment separation
+# happens at the target level (dev / prod / ci), which is the axis that actually
+# needs isolating. Splitting a 16-node project across four more schemas would add
+# navigation cost without adding safety.
+# ---------------------------------------------------------------------------
+models:
+  movie_ratings_analytics:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: ephemeral
+    dim:
+      +materialized: table
+    fct:
+      +materialized: table
+    marts:
+      +materialized: table
+
+seeds:
+  movie_ratings_analytics:
+    +quote_columns: false
+    seed_genre_groups:
+      +column_types:
+        genre: varchar(50)
+        genre_group: varchar(50)
+        is_fiction: boolean
+        is_format_not_genre: boolean
+
+snapshots:
+  movie_ratings_analytics:
+    +target_schema: snapshots

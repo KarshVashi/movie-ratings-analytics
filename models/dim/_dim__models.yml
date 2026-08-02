@@ -1,0 +1,100 @@
+version: 2
+
+models:
+  - name: dim_movies
+    description: >
+      One row per film. Table: small (27,278 rows), joined by nearly everything
+      downstream, and the regex title parse is worth doing once rather than on
+      every query.
+    columns:
+      - name: movie_id
+        description: Primary key.
+        tests:
+          # Verified against the source before being asserted here: zero
+          # duplicate movieId values in movies.csv. If this ever fails, the
+          # dimension grain is wrong -- it is not a test to soften or comment
+          # out, because everything downstream joins on it.
+          - unique
+          - not_null
+      - name: movie_title
+        description: Title with the release year stripped and casing normalised.
+        tests:
+          - not_null
+      - name: release_year
+        description: >
+          Parsed out of the title. Null for 23 of 27,278 films. Most genuinely
+          carry no year ("Babylon 5"), but a handful are malformed rather than
+          absent -- "... (1983))" has a stray second bracket and
+          "Diplomatic Immunity (2009- )" uses an en-dash range. Both are source
+          defects, and the parse deliberately returns null rather than guessing.
+          source_title is retained so the two cases can be told apart.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1870
+                max_value: 2030
+                row_condition: "release_year is not null"
+      - name: source_title
+        description: The unmodified source string, retained for audit.
+      - name: genre_array
+        description: Genres as an array, split on the pipe delimiter.
+      - name: genre_list
+        description: The raw pipe-delimited genre string.
+      - name: is_unclassified
+        description: True where the source records '(no genres listed)'.
+        tests:
+          - not_null
+
+  - name: dim_users
+    description: >
+      One row per user, with activity attributes derived from both the rating and
+      tag streams. Table: 138,493 rows, and the two aggregations behind it scan
+      20M and 465K rows respectively -- not something to repeat per query.
+    columns:
+      - name: user_id
+        description: Primary key.
+        tests:
+          - unique
+          - not_null
+      - name: n_ratings
+        tests:
+          - not_null
+      - name: n_tags
+        tests:
+          - not_null
+      - name: avg_rating_given
+        description: Null for users who have tagged but never rated.
+      - name: first_rating_at
+        description: Null for tag-only users.
+      - name: last_rating_at
+      - name: first_tag_at
+      - name: last_tag_at
+      - name: cohort_month
+        description: >
+          Month of first rating. Null for tag-only users, who are excluded from
+          mart_user_cohort_retention for that reason.
+      - name: active_span_days
+        description: Days between first and last rating.
+      - name: has_tagged
+        description: >
+          True for 7,801 of 138,493 users. Tagging is a minority behaviour, which
+          is why cohorts are anchored to rating rather than to activity of any kind.
+        tests:
+          - not_null
+
+  - name: dim_genome_tags
+    description: >
+      One row per genome tag. 1,128 rows, so table versus view makes no
+      measurable difference here -- it is a table for consistency with the other
+      dimensions, which is a legitimate reason on its own. Not every
+      materialisation needs a performance argument behind it.
+    columns:
+      - name: tag_id
+        description: Primary key.
+        tests:
+          - unique
+          - not_null
+      - name: tag_name
+        tests:
+          - not_null
+          - unique

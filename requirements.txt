@@ -1,0 +1,5 @@
+# Pinned so that CI and local development resolve to the same dbt. An
+# unpinned `pip install dbt-snowflake` in CI means the day dbt ships a breaking
+# change, a pull request that touches nothing fails for reasons unrelated to it.
+dbt-core==1.12.0
+dbt-snowflake==1.9.0

@@ -1,0 +1,142 @@
+version: 2
+
+models:
+  - name: fct_ratings
+    description: >
+      One row per (user, movie) -- a user's current rating for a film, not a log
+      of every rating they ever gave. Incremental with a merge strategy so that a
+      revised rating overwrites rather than duplicating.
+    tests:
+      # The grain declaration, and the test that makes the merge safe. Snowflake
+      # MERGE raises a duplicate-row error if the source carries more than one
+      # row per key, so this failing is the difference between a clear test
+      # failure and an opaque runtime error on some later incremental run.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - user_id
+              - movie_id
+    columns:
+      - name: user_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_users')
+                field: user_id
+      - name: movie_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_movies')
+                field: movie_id
+      - name: rating
+        description: Half-star scale.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0.5
+                max_value: 5.0
+      - name: rating_timestamp
+        tests:
+          - not_null
+
+  - name: fct_genome_scores
+    description: >
+      One row per (movie, tag) with a rounded relevance score. Materialised as a
+      view rather than a table -- storing 11.7M rows to hold a rounded float buys
+      nothing. See the model file for the full reasoning.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - movie_id
+              - tag_id
+    columns:
+      - name: movie_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_movies')
+                field: movie_id
+      - name: tag_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_genome_tags')
+                field: tag_id
+      - name: relevance_score
+        description: Model-derived relevance, bounded [0, 1] by construction upstream.
+        tests:
+          - not_null
+          # An explicit bound rather than a `WHERE relevance > 0` in the model.
+          # That filter would remove zero of 11,709,768 rows, so it would assert
+          # nothing while looking like validation -- and it would keep looking
+          # like validation on the day the property stopped holding. This can
+          # actually fail.
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+  - name: fct_movie_rating_daily
+    description: >
+      One row per (movie, day on which it was rated), with 7- and 28-day rolling
+      engagement. Incremental with a lookback window rather than a high-water
+      mark, because rolling measures for past days change as new ratings arrive.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - movie_id
+              - rating_date
+    columns:
+      - name: movie_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_movies')
+                field: movie_id
+      - name: rating_date
+        tests:
+          - not_null
+      - name: n_ratings
+        description: Ratings received on this day.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+      - name: avg_rating
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0.5
+                max_value: 5.0
+      - name: n_ratings_7d
+        description: Rolling 7-calendar-day rating count, inclusive of this day.
+        tests:
+          - not_null
+      - name: n_ratings_28d
+        description: Rolling 28-calendar-day rating count, inclusive of this day.
+        tests:
+          - not_null
+          # A 28-day window must contain at least as much as the 7-day window it
+          # encloses. This catches frame-definition errors -- the failure mode
+          # the lookback design is most exposed to -- which no column-level range
+          # test would surface.
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= n_ratings_7d"
+      - name: avg_rating_28d
+        description: Volume-weighted mean rating over the trailing 28 days.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0.5
+                max_value: 5.0

@@ -1,0 +1,49 @@
+version: 2
+
+seeds:
+  - name: seed_genre_groups
+    description: >
+      Maps each MovieLens genre to a broader grouping, and flags the one entry
+      that is not a genre at all.
+
+      A seed rather than a source, because there is no upstream system that owns
+      this mapping -- it is a taxonomy someone decided on, so version control is
+      its system of record and it gets reviewed in a pull request alongside the
+      models that consume it. A seed rather than a CASE statement, because
+      burying the mapping inside SQL puts it where nobody looking for the
+      taxonomy would think to look, and makes changing it a code change rather
+      than a data change.
+    columns:
+      - name: genre
+        description: Genre string exactly as it appears in the source pipe-delimited list.
+        tests:
+          - unique
+          - not_null
+      - name: genre_group
+        description: Broader grouping used for roll-ups in mart_tag_genre_affinity.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - Action & Adventure
+                  - Speculative
+                  - Crime & Mystery
+                  - Drama & Romance
+                  - Comedy
+                  - Family & Animation
+                  - Non-fiction
+                  - Format
+                  - Unclassified
+      - name: is_fiction
+        description: >
+          Null where the question does not apply -- IMAX is a format and
+          '(no genres listed)' is an absence of information. Deliberately not
+          defaulted to false, which would assert something untrue.
+      - name: is_format_not_genre
+        description: >
+          True for IMAX, which MovieLens files among the genres but which
+          describes delivery rather than content. Marked here so that models
+          filter on a named property instead of hard-coding the string.
+        tests:
+          - not_null

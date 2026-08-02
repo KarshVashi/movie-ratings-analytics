@@ -1,0 +1,97 @@
+version: 2
+
+sources:
+  - name: movielens
+    description: >
+      Raw MovieLens 20M extract, batch-loaded into Snowflake.
+
+      Freshness is measured from warehouse load metadata (Snowflake LAST_ALTERED)
+      rather than from an event timestamp. The newest rating in this dataset is
+      from 2015, so event time tells us nothing about whether the loading pipeline
+      is still delivering -- it would report a permanent multi-year staleness
+      while a genuinely broken loader looked identical to a healthy one. Load
+      recency is the property worth alerting on for a batch-delivered source.
+
+      Thresholds are sized to a monthly load cadence, which is the cadence the
+      pipelines this project models are designed around.
+    database: MOVIELENS
+    schema: RAW
+
+    config:
+      freshness:
+        warn_after: {count: 35, period: day}
+        error_after: {count: 60, period: day}
+
+    tables:
+      - name: raw_movies
+        description: One row per movie. Title embeds the release year in parentheses.
+        columns:
+          - name: movieId
+            description: Natural key. Stable across MovieLens releases.
+            tests:
+              - unique
+              - not_null
+          - name: title
+            description: Movie title with release year appended, e.g. "Toy Story (1995)".
+          - name: genres
+            description: Pipe-delimited genre list, or "(no genres listed)".
+
+      - name: raw_ratings
+        description: One row per user rating event.
+        columns:
+          - name: userId
+            tests:
+              - not_null
+          - name: movieId
+            tests:
+              - not_null
+          - name: rating
+            description: Half-star scale, 0.5 to 5.0.
+            tests:
+              - not_null
+          - name: timestamp
+            description: Unix epoch seconds. Second granularity, so ties are common.
+
+      - name: raw_tags
+        description: One row per user tag-application event.
+        columns:
+          - name: userId
+            tests:
+              - not_null
+          - name: movieId
+            tests:
+              - not_null
+          - name: tag
+            description: Free text. Nullable -- a small number of rows carry empty tags.
+
+      # The genome tables are static reference data. MovieLens regenerates the
+      # relevance matrix wholesale on a multi-year cadence, so a monthly staleness
+      # alert on them would be noise rather than signal. Freshness is deliberately
+      # disabled rather than merely loosened: not every source deserves the same
+      # contract, and an alert nobody can act on trains people to ignore alerts.
+      - name: raw_genome_scores
+        description: Movie-to-tag relevance matrix. Static reference data.
+        config:
+          freshness: null
+        columns:
+          - name: movieId
+            tests:
+              - not_null
+          - name: tagId
+            tests:
+              - not_null
+          - name: relevance
+            description: Model-derived relevance in [0, 1].
+
+      - name: raw_genome_tags
+        description: Genome tag vocabulary, 1,128 rows. Static reference data.
+        config:
+          freshness: null
+        columns:
+          - name: tagId
+            tests:
+              - unique
+              - not_null
+          - name: tag
+            tests:
+              - not_null

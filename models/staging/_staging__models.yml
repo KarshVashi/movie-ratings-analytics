@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: stg_movies
+    description: >
+      Movies, renamed to snake_case. No transformation beyond aliasing -- parsing
+      the release year out of the title belongs in dim_movies, not here, so that
+      staging stays a layer anyone can read against the source without holding
+      any business logic in their head.
+    columns:
+      - name: movie_id
+        description: Natural key, carried through from the source unchanged.
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: Title with the release year still embedded.
+      - name: genres
+        description: Pipe-delimited genre string.
+
+  - name: stg_ratings
+    description: >
+      Rating events with the Unix epoch cast to a timestamp. One row per rating
+      event as delivered; uniqueness is asserted downstream on fct_ratings, which
+      is where the grain is declared.
+    columns:
+      - name: user_id
+        tests:
+          - not_null
+      - name: movie_id
+        tests:
+          - not_null
+      - name: rating
+        tests:
+          - not_null
+      - name: rating_timestamp
+        description: Second-granularity, so ties on the boundary second are common.
+        tests:
+          - not_null
+
+  - name: stg_tags
+    description: Tag-application events with the Unix epoch cast to a timestamp.
+    columns:
+      - name: user_id
+        tests:
+          - not_null
+      - name: movie_id
+        tests:
+          - not_null
+      - name: tag
+        description: >
+          Free text, and genuinely nullable -- 16 of 465,564 source rows carry an
+          empty tag. Deliberately not filtered here: staging reports what arrived,
+          and 16 nulls are a fact about the source rather than a defect to hide.
+      - name: tag_timestamp
+        tests:
+          - not_null
+
+  - name: stg_genome_scores
+    description: Movie-to-tag relevance matrix, renamed. 11.7M rows.
+    columns:
+      - name: movie_id
+        tests:
+          - not_null
+      - name: tag_id
+        tests:
+          - not_null
+      - name: relevance
+        tests:
+          - not_null
+
+  - name: stg_genome_tags
+    description: Genome tag vocabulary, renamed. 1,128 rows.
+    columns:
+      - name: tag_id
+        tests:
+          - unique
+          - not_null
+      - name: tag
+        tests:
+          - not_null

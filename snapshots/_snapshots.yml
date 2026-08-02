@@ -1,0 +1,41 @@
+version: 2
+
+snapshots:
+  - name: snap_movies
+    description: >
+      SCD Type 2 history of movie metadata, taken against the raw source rather
+      than against dim_movies. Captures title corrections, genre
+      reclassifications and hard deletes.
+    tests:
+      # The custom generic test written for this project. dbt maintains the
+      # dbt_valid_from / dbt_valid_to columns but never checks that the result is
+      # coherent, and the ways it can go wrong -- a non-deterministic source
+      # query, an unstable unique_key -- are all silent.
+      #
+      # allow_closed_entities is on because this snapshot uses
+      # hard_deletes='invalidate', which correctly leaves deleted films with zero
+      # open versions. Without the flag the test would report every hard delete
+      # as a violation.
+      - no_overlapping_versions:
+          arguments:
+            entity_key: movie_id
+            allow_closed_entities: true
+    columns:
+      - name: movie_id
+        description: Natural key of the versioned entity.
+        tests:
+          - not_null
+      - name: title
+        description: Versioned. A change here opens a new record.
+      - name: genres
+        description: Versioned. A change here opens a new record.
+      - name: dbt_scd_id
+        description: Surrogate key, one per version.
+        tests:
+          - unique
+          - not_null
+      - name: dbt_valid_from
+        tests:
+          - not_null
+      - name: dbt_valid_to
+        description: Null on the current version. Set on supersession or hard delete.

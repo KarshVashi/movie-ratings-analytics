@@ -1,0 +1,105 @@
+version: 2
+
+models:
+  - name: mart_tag_genre_affinity
+    description: >
+      One row per (genre, genome tag): how strongly a tag characterises a genre,
+      both absolutely and relative to the tag's mean across all genres.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - genre
+              - tag_id
+    columns:
+      - name: genre_group
+        description: Broader grouping from seed_genre_groups.
+        tests:
+          - not_null
+      - name: genre
+        tests:
+          - not_null
+      - name: tag_id
+        tests:
+          - not_null
+      - name: tag_name
+        tests:
+          - not_null
+      - name: n_movies
+        description: Films in this genre carrying a relevance score for this tag.
+        tests:
+          - not_null
+      - name: avg_relevance
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: median_relevance
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: relevance_lift_vs_all_genres
+        description: >
+          avg_relevance minus the tag's mean across every genre. Positive means
+          the tag is distinctive to this genre rather than generically popular.
+          Bounded [-1, 1] since both terms are bounded [0, 1].
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: -1
+                max_value: 1
+      - name: tag_rank_in_genre
+        description: Rank by lift within the genre, 1 = most distinctive.
+        tests:
+          - not_null
+
+  - name: mart_user_cohort_retention
+    description: >
+      One row per (cohort month, months since first rating). Retention curve by
+      acquisition cohort, where a cohort is the set of users whose first rating
+      fell in that month.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - cohort_month
+              - months_since_first_rating
+    columns:
+      - name: cohort_month
+        tests:
+          - not_null
+      - name: cohort_size
+        description: Users whose first rating fell in this month.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+      - name: months_since_first_rating
+        description: >
+          Offset from the cohort month. Zero on the acquisition month itself, and
+          never negative -- a negative value would mean a user rated before their
+          own first rating, which is the clearest possible signal that the cohort
+          join is wrong.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+      - name: active_users
+        tests:
+          - not_null
+      - name: retention_rate
+        description: >
+          active_users / cohort_size. Exactly 1.0 at offset 0 by construction,
+          since every user rates in their own acquisition month.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                max_value: 1

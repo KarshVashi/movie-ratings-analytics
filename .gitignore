@@ -1,0 +1,9 @@
+target/
+dbt_packages/
+logs/
+.env
+.user.yml
+
+# Astro CLI local runtime
+orchestration/.astro/
+orchestration/airflow_settings.yaml

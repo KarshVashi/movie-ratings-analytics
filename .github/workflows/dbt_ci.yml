@@ -1,0 +1,92 @@
+name: dbt CI
+
+# Runs the whole project against a throwaway Snowflake schema on every pull
+# request. The point is not that the SQL compiles -- `dbt parse` would tell you
+# that in two seconds without a warehouse. The point is that the models build
+# against real data and the 100-odd tests pass, which is the only thing that
+# actually demonstrates a change is safe to merge.
+on:
+  pull_request:
+    branches: [main]
+  # Manual trigger, useful when debugging the workflow itself.
+  workflow_dispatch:
+
+concurrency:
+  # A second push to the same PR cancels the run in flight. Without this, two
+  # runs would build into the same CI schema simultaneously and race.
+  group: dbt-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: dbt build (ci target)
+    runs-on: ubuntu-latest
+
+    env:
+      DBT_PROFILES_DIR: ./.dbt
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      # One schema per PR. Isolation between concurrent pull requests, and a
+      # name that says where it came from when one is found lying around.
+      DBT_CI_SCHEMA: CI_PR_${{ github.event.pull_request.number || 'MANUAL' }}
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install dbt
+        run: pip install -r requirements.txt
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      # Fails the build on anything that cannot be parsed or resolved -- a bad
+      # ref, an undefined macro, a malformed YAML property. Cheap, and it fails
+      # in seconds rather than after a five-minute warehouse build.
+      - name: Validate project
+        run: dbt parse --target ci
+
+      # Freshness is checked but deliberately not allowed to fail the build. A
+      # stale source is a data problem, not a problem with the code under
+      # review, and blocking a reviewer on it trains people to merge past red
+      # CI. It belongs on the orchestration schedule, where someone can act on
+      # it -- see the Airflow DAG.
+      - name: Check source freshness (non-blocking)
+        run: dbt source freshness --target ci
+        continue-on-error: true
+
+      # The real gate: seeds, models, snapshots and every test, in dependency
+      # order, halting the moment anything fails.
+      - name: dbt build
+        run: dbt build --target ci --fail-fast
+
+      - name: Generate docs
+        run: dbt docs generate --target ci
+
+      - name: Upload run artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-target-${{ github.event.pull_request.number || github.run_id }}
+          path: |
+            target/manifest.json
+            target/run_results.json
+            target/catalog.json
+            target/index.html
+          retention-days: 14
+
+      # always(), so a failed build still cleans up after itself. Otherwise every
+      # red pull request leaves a schema behind forever.
+      - name: Drop the CI schema
+        if: always()
+        run: dbt run-operation drop_ci_schema --target ci

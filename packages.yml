@@ -1,0 +1,9 @@
+packages:
+  - package: dbt-labs/dbt_utils
+    version: 1.4.1
+
+  # Range and distribution assertions that would otherwise be hand-written
+  # singular tests. Used for the relevance_score bounds check that replaced the
+  # no-op `WHERE relevance > 0` filter in fct_genome_scores.
+  - package: metaplane/dbt_expectations
+    version: [">=0.10.0", "<0.11.0"]

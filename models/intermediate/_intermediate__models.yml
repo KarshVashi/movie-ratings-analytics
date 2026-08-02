@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: int_movie_tag_relevance
+    description: >
+      One row per (movie, genre, genome tag). Explodes the pipe-delimited genre
+      string so that relevance scores can be aggregated to genre level.
+
+      Ephemeral: single consumer (mart_tag_genre_affinity), no standalone query
+      value, and an output larger than either input. Tests still run -- dbt
+      inlines the model into a wrapper query to execute them -- but there is no
+      relation in the warehouse to inspect between runs, which is the trade-off
+      ephemeral asks you to accept.
+    columns:
+      - name: movie_id
+        tests:
+          - not_null
+      - name: genre
+        description: A single genre, exploded out of dim_movies.genre_array.
+        tests:
+          - not_null
+      - name: tag_id
+        tests:
+          - not_null
+      - name: tag_name
+        tests:
+          - not_null
+      - name: relevance_score
+        tests:
+          - not_null

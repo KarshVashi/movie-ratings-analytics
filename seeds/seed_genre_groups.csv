@@ -1,0 +1,21 @@
+genre,genre_group,is_fiction,is_format_not_genre
+Action,Action & Adventure,true,false
+Adventure,Action & Adventure,true,false
+War,Action & Adventure,true,false
+Western,Action & Adventure,true,false
+Sci-Fi,Speculative,true,false
+Fantasy,Speculative,true,false
+Horror,Speculative,true,false
+Crime,Crime & Mystery,true,false
+Mystery,Crime & Mystery,true,false
+Thriller,Crime & Mystery,true,false
+Film-Noir,Crime & Mystery,true,false
+Drama,Drama & Romance,true,false
+Romance,Drama & Romance,true,false
+Comedy,Comedy,true,false
+Animation,Family & Animation,true,false
+Children,Family & Animation,true,false
+Musical,Family & Animation,true,false
+Documentary,Non-fiction,false,false
+IMAX,Format,,true
+(no genres listed),Unclassified,,false

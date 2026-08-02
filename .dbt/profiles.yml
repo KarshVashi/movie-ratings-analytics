@@ -1,0 +1,59 @@
+# Repo-local profiles. CI points DBT_PROFILES_DIR at this directory; local
+# development can do the same by exporting the variables below, or keep using
+# ~/.dbt/profiles.yml.
+#
+# No credentials in this file, which is the point of it. A password in plaintext
+# in ~/.dbt/profiles.yml is survivable on a laptop and unacceptable the moment CI
+# needs the same connection, because there is no version of "commit the password"
+# that is safe.
+#
+# Environment separation is the axis that matters here:
+#
+#   dev   DEV schema, the target you develop against
+#   prod  PROD schema, written only by orchestration
+#   ci    a throwaway per-pull-request schema, dropped when the run finishes
+#
+# Sharing one schema across all three means an in-progress model on a laptop
+# overwrites the table a dashboard is reading, and a failed run leaves prod
+# half-built with no way to tell which half is stale.
+
+movie_ratings_analytics:
+  target: dev
+  outputs:
+
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORM') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'MOVIELENS') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH') }}"
+      schema: DEV
+      # The staging layer is five mutually independent branches. Running at
+      # threads: 1 would serialise them for no reason.
+      threads: 8
+
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORM') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'MOVIELENS') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH') }}"
+      schema: PROD
+      threads: 8
+
+    ci:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORM') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'MOVIELENS') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'COMPUTE_WH') }}"
+      # One schema per pull request, so concurrent PRs cannot collide and a
+      # failed run leaves nothing behind to confuse the next one.
+      schema: "{{ env_var('DBT_CI_SCHEMA', 'CI_LOCAL') }}"
+      threads: 8
