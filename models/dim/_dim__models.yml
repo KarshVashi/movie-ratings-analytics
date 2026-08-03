@@ -57,24 +57,61 @@ models:
           - unique
           - not_null
       - name: n_ratings
+        description: >
+          Ratings this user has submitted. Zero is possible in principle, for a
+          user who has only ever tagged; the bound below asserts non-negativity
+          rather than a minimum, since a negative count would mean the COALESCE
+          over the LEFT JOIN has broken rather than that the data is unusual.
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
       - name: n_tags
+        description: Tag applications this user has submitted. Zero for most users.
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
       - name: avg_rating_given
-        description: Null for users who have tagged but never rated.
+        description: >
+          Mean rating this user has given. Null for users who have tagged but
+          never rated. A mean of ratings drawn from [0.5, 5.0] must itself fall
+          in [0.5, 5.0] -- if it does not, the aggregation is joining to the
+          wrong grain and inflating or deflating the denominator.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0.5
+                max_value: 5.0
+                row_condition: "avg_rating_given is not null"
       - name: first_rating_at
-        description: Null for tag-only users.
+        description: Timestamp of this user's earliest rating. Null for tag-only users.
       - name: last_rating_at
+        description: >
+          Timestamp of this user's most recent rating. Null for tag-only users.
+          Never earlier than first_rating_at, which is what active_span_days
+          depends on.
       - name: first_tag_at
+        description: Timestamp of this user's earliest tag application. Null if they have never tagged.
       - name: last_tag_at
+        description: Timestamp of this user's most recent tag application. Null if they have never tagged.
       - name: cohort_month
         description: >
           Month of first rating. Null for tag-only users, who are excluded from
           mart_user_cohort_retention for that reason.
       - name: active_span_days
-        description: Days between first and last rating.
+        description: >
+          Days between first and last rating. Zero for users who rated once, or
+          who did all their rating inside a single day. Cannot be negative --
+          that would mean MIN and MAX had been transposed, which is the kind of
+          mistake that produces plausible-looking output and no error.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                row_condition: "active_span_days is not null"
       - name: has_tagged
         description: >
           True for 7,801 of 138,493 users. Tagging is a minority behaviour, which
