@@ -1,0 +1,39 @@
+# Shares the dbt project into the Airflow containers.
+#
+# The Astro CLI generates its own docker-compose file and then merges anything it
+# finds here on top of it. This file only adds volume mounts; everything else
+# about the containers is left as Astro configures it.
+#
+# Why this is needed: Cosmos builds the DAG by reading dbt_project.yml and
+# target/manifest.json at DAG-parse time. Those files live on the host, and a
+# container sees nothing of the host filesystem unless it is mounted in. The path
+# on the right must match DBT_PROJECT_PATH in dags/movie_ratings_analytics_dag.py.
+#
+# `../` is relative to this file, so it resolves to the repository root -- the
+# directory holding dbt_project.yml. The orchestration/ directory ends up visible
+# inside the mount too, which is harmless.
+#
+# Deliberately NOT mounted read-only. dbt writes target/ when it compiles and
+# dbt_packages/ when `install_deps` runs, so a read-only mount fails at the first
+# task. The side effect is that container runs write into your local working copy
+# -- both of those directories are gitignored, so nothing lands in version
+# control, and it means `dbt docs` output from an Airflow run is available on the
+# host afterwards.
+#
+# All three services get the mount because each needs the project for a different
+# reason: the scheduler parses the DAG file, the webserver renders the graph and
+# source code in the UI, and the triggerer imports the DAG on startup. A mount on
+# the scheduler alone produces a DAG that runs but shows import errors in the UI.
+
+services:
+  scheduler:
+    volumes:
+      - ../:/usr/local/airflow/dbt/movie_ratings_analytics
+
+  webserver:
+    volumes:
+      - ../:/usr/local/airflow/dbt/movie_ratings_analytics
+
+  triggerer:
+    volumes:
+      - ../:/usr/local/airflow/dbt/movie_ratings_analytics
