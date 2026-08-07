@@ -4,7 +4,7 @@ A layered dbt project on Snowflake — staging → dimensions/facts → marts �
 
 Built on the [MovieLens 20M](https://grouplens.org/datasets/movielens/20m/) dataset: 20,000,263 ratings, 465,564 tag applications and an 11.7M-row movie–tag relevance matrix across 27,278 films and 138,493 users.
 
-**Docs and lineage graph:** *(add the GitHub Pages link here once published — `dbt docs generate --static`, then push to `gh-pages`)*
+**[Browse the dbt docs →](https://karshvashi.github.io/movie-ratings-analytics/)** Every model, column and test documented, with the full lineage graph from raw sources through to marts.
 
 ---
 
