@@ -12,14 +12,25 @@ snapshots:
       # coherent, and the ways it can go wrong -- a non-deterministic source
       # query, an unstable unique_key -- are all silent.
       #
-      # allow_closed_entities is on because this snapshot uses
-      # hard_deletes='invalidate', which correctly leaves deleted films with zero
-      # open versions. Without the flag the test would report every hard delete
-      # as a violation.
+      # Both relaxations are here because this snapshot uses
+      # hard_deletes='invalidate':
+      #
+      #   allow_closed_entities  a withdrawn title correctly ends with zero open
+      #                          versions rather than exactly one
+      #
+      #   allow_gaps             a title that was withdrawn and later reinstated
+      #                          correctly has a gap between its windows. It did
+      #                          not exist during that interval, and a history
+      #                          that closed the gap would be claiming it did
+      #
+      # Neither is relaxed anywhere else. On a snapshot without hard deletes both
+      # conditions are real defects -- a missing open version means current state
+      # has been lost, a gap means history has.
       - no_overlapping_versions:
           arguments:
             entity_key: movie_id
             allow_closed_entities: true
+            allow_gaps: true
     columns:
       - name: movie_id
         description: Natural key of the versioned entity.
