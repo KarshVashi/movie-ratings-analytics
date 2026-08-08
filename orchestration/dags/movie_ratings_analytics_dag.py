@@ -44,6 +44,7 @@ from cosmos import (
     ProfileConfig,
     ProjectConfig,
     RenderConfig,
+    TestBehavior,
 )
 from cosmos.profiles import SnowflakeUserPasswordProfileMapping
 
@@ -84,15 +85,15 @@ movie_ratings_analytics_dag = DbtDag(
         # building on top of it would produce confidently wrong numbers.
         # Warnings do not block; errors do, via the thresholds in
         # _movielens__sources.yml.
-        test_behavior="after_each",
+        #
+        # AFTER_EACH attaches each model's tests to that model's own task, so a
+        # failing test blocks only that model's dependents. The alternative,
+        # AFTER_ALL, runs every test in one task at the end -- by which point
+        # everything downstream of the bad data has already been built.
+        test_behavior=TestBehavior.AFTER_EACH,
     ),
     operator_args={
         "install_deps": True,
-        # Per-model retries: this is the payoff. A transient Snowflake error on
-        # one model retries that model, not the twenty minutes of work that
-        # already succeeded upstream of it.
-        "retries": 2,
-        "retry_delay": timedelta(minutes=5),
     },
     # Monthly, matching the load cadence the source freshness thresholds assume.
     # A daily schedule against a source that is refreshed monthly would burn
@@ -104,6 +105,15 @@ movie_ratings_analytics_dag = DbtDag(
         "owner": "analytics-engineering",
         "depends_on_past": False,
         "email_on_failure": False,
+        # Per-model retries: this is the payoff of one task per model. A
+        # transient Snowflake error retries that single model, not the twenty
+        # minutes of work that already succeeded upstream of it.
+        #
+        # Set here rather than in operator_args because default_args is where
+        # Airflow expects task defaults to live -- it propagates to every
+        # operator Cosmos creates inside this DAG, and tests/dags/ asserts on it.
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
     },
     tags=["dbt", "snowflake", "movielens"],
     doc_md=__doc__,
