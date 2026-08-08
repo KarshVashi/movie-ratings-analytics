@@ -25,8 +25,21 @@
           - no_overlapping_versions:
               entity_key: movie_id
 
-    `hard_deletes='invalidate'` legitimately leaves an entity with zero open
-    versions, so set allow_closed_entities: true on snapshots that use it.
+    Two of the four checks have to be relaxed on a snapshot that uses
+    `hard_deletes='invalidate'`, because deletion changes what a valid history
+    looks like:
+
+      allow_closed_entities   a deleted entity legitimately has zero open
+                              versions, rather than exactly one
+
+      allow_gaps              an entity that was deleted and later reappeared
+                              legitimately has a gap between its windows -- it
+                              genuinely did not exist during that interval, and
+                              closing the gap would assert that it did
+
+    Both default to false, because on a snapshot without hard deletes each of
+    those really is a defect: a missing open version means current state has
+    been lost, and a gap means history has.
 #}
 
 {% test no_overlapping_versions(
@@ -34,7 +47,8 @@
     entity_key,
     valid_from='dbt_valid_from',
     valid_to='dbt_valid_to',
-    allow_closed_entities=false
+    allow_closed_entities=false,
+    allow_gaps=false
 ) %}
 
 WITH versions AS (
@@ -66,12 +80,14 @@ violations AS (
 
     UNION ALL
 
+    {% if not allow_gaps %}
     SELECT entity_key, valid_from, valid_to, 'gap_between_versions'
     FROM versions
     WHERE next_valid_from IS NOT NULL
       AND valid_to < next_valid_from
 
     UNION ALL
+    {% endif %}
 
     SELECT entity_key, valid_from, valid_to, 'invalid_open_version_count'
     FROM versions

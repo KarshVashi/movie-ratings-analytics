@@ -4,7 +4,7 @@ A layered dbt project on Snowflake — staging → dimensions/facts → marts �
 
 Built on the [MovieLens 20M](https://grouplens.org/datasets/movielens/20m/) dataset: 20,000,263 ratings, 465,564 tag applications and an 11.7M-row movie–tag relevance matrix across 27,278 films and 138,493 users.
 
-**Docs and lineage graph:** *(add the GitHub Pages link here once published — `dbt docs generate --static`, then push to `gh-pages`)*
+**[Browse the dbt docs →](https://karshvashi.github.io/movie-ratings-analytics/)** Every model, column and test documented, with the full lineage graph from raw sources through to marts.
 
 ---
 
@@ -75,7 +75,7 @@ Because the source is a static 2015 extract, `scripts/02_simulate_source_changes
 
 ### Testing
 
-103 tests. The ones worth pointing at:
+106 tests. The ones worth pointing at:
 
 - **`no_overlapping_versions`** — a custom generic test written for this project. dbt maintains `dbt_valid_from` / `dbt_valid_to` but never checks that the result is coherent, and every way it can go wrong is silent. A snapshot whose source query is non-deterministic — a `LIMIT` with no `ORDER BY`, a filter on a volatile column — will happily produce overlapping windows and duplicate open records while every built-in test passes. The test asserts that validity windows tile the timeline per entity: no overlaps, no gaps, exactly one open record, no window closing before it opens. It reports which of the four failure modes fired rather than just that something did.
 - **`n_ratings_28d >= n_ratings_7d`** — a relationship between columns, not a range on one. A 28-day window must contain at least as much as the 7-day window it encloses. This catches frame-definition errors, the failure mode the lookback design is most exposed to, which no column-level test would surface.
